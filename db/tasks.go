@@ -3,6 +3,7 @@ package db
 import(
 	 "github.com/boltdb/bolt"
 	 "time"
+	 "encoding/binary"
 	)
 
 var taskBucket = []byte("tasks")
@@ -23,4 +24,57 @@ func Init(dbPath string) error {
 	_, err := tx.CreateBucketIfNotExists(taskBucket)
 	return err
 })
+}
+
+func CreateTask(task string) (int, error) {
+	var id int
+	err := db.Update(func(tx *bolt.Tx) error {
+	b := tx.Bucket(taskBucket)
+	id64, _ := b.NextSequence()
+	id = int(id64)
+	key := integerToBinary(id)
+	return b.Put(key, []byte(task))
+})
+if err != nil {
+	return -1,err
+} else {
+return id,nil
+}
+}
+
+func AllTasks() ([]Task, error) {
+	var tasks []Task
+	err := db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(taskBucket)
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			tasks = append(tasks,Task{
+				Key: binaryToInteger(k),
+				Value: string(v),				
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+func DeleteTask(key int) error {
+	err := db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(taskBucket)
+		return b.Delete(integerToBinary(key))
+	})
+	return err
+}
+
+func integerToBinary(v int) []byte {
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint64(b, uint64(v))
+	return b
+}
+
+func binaryToInteger(b []byte) int {
+	return int(binary.BigEndian.Uint64(b))
 }
